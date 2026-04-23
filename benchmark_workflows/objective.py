@@ -2,7 +2,7 @@ import math
 
 from benchopt import BaseObjective
 
-from toolsbench.utils import compute_psnr
+from toolsbench.utils import compute_psnr, compute_asinh_psnr
 
 
 class Objective(BaseObjective):
@@ -49,6 +49,11 @@ class Objective(BaseObjective):
             reference=self.ground_truth,
             max_pixel=self.max_pixel,
         )
+        asinh_psnr = compute_asinh_psnr(
+            reconstruction=reconstruction,
+            reference=self.ground_truth,
+            max_pixel=self.max_pixel,
+        )
 
         consumed_packets = int(trace.get("consumed_packets", 0))
         consumed_batches = int(trace.get("consumed_batches", 0))
@@ -80,8 +85,9 @@ class Objective(BaseObjective):
             avg_batch_size = math.nan
 
         return dict(
-            value=-psnr,
+            value=-asinh_psnr,
             psnr=psnr,
+            asinh_psnr=asinh_psnr,
             throughput_fps=throughput_fps,
             throughput_mb_s=throughput_mb_s,
             total_runtime_s=total_runtime_s,

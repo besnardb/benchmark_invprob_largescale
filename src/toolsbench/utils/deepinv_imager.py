@@ -504,6 +504,49 @@ class DeepinvDirtyImager(torch.nn.Module):
             print("weights", weights.shape)  # [channels, N]
 
         return physics, visibilities, weights
+    
+    def read_ms(
+            self,
+        visibility_path: Path,
+        visibility_format: str,
+        visibility_column: str,
+        bin_data: bool = False,
+        imaging_npixel: Optional[int] = None,
+        binning_factor: Optional[float] = None,
+    ):
+        # Load data
+        uvw, visibilities, freqs = self.load_visibilities(
+            visibility_path, visibility_format, visibility_column
+        )
+        # Normalize uv coords and compute weights
+        samples_locs, weights, visibilities = self.normalize_uv_coords(
+            uvw, freqs, visibilities
+        )
+
+        # Update default paramseters if provided
+        imaging_npixel = (
+            imaging_npixel if imaging_npixel is not None else self.config.imaging_npixel
+        )
+        binning_factor = (
+            binning_factor if binning_factor is not None else self.config.binning_factor
+        )
+
+        if bin_data:
+            samples_locs, weights, visibilities = self.bin_uv_data(
+                samples_locs,
+                visibilities,
+                weights,
+                grid_size=int(imaging_npixel * binning_factor),
+                device=self.device,
+            )
+
+        if self.verbose:
+            print("visibilities", visibilities.shape)  # [N, channels, pol]
+            print("samples_locs", samples_locs.shape)  # [2, N]
+            print("weights", weights.shape)  # [channels, N]
+
+        return samples_locs, visibilities, weights
+    
 
     def create_psf(
         self,

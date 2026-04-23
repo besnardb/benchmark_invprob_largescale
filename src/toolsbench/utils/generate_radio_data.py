@@ -46,7 +46,7 @@ def generate_data_for_size(cfg, image_size):
             return
 
     fits_stem = Path(fits_name).stem
-    resized_fits_path = ms_cache_dir / f"{fits_stem}_{image_size}.fits"
+    resized_fits_path = ms_cache_dir / f"{fits_stem}.fits"
 
     if resized_fits_path.exists():
         print(f"Using cached resized image: {resized_fits_path}")

@@ -6,7 +6,7 @@ dataset:
       fits_name : "RA_18.7117_DEC_0.3194_size_1024.fits"
       image_size: 1024
       noise_level: 0.1
-      simulator_hash: "892471111a25f7dda75b0f4670d43bfb"
+      simulator_hash: "RA_18.7117_DEC_0.3194_size_1024"
 
 solver:
   - PnP:

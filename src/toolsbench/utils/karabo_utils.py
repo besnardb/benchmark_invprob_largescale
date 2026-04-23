@@ -6,6 +6,8 @@ from pathlib import Path
 from datetime import timedelta, timezone, datetime
 from astropy.time import Time
 from astropy.io import fits
+
+from karabo.simulation.telescope_versions import SKALowAAStarVersions
 from karabo.simulation.interferometer import InterferometerSimulation
 from karabo.simulation.observation import Observation
 from karabo.simulation.sky_model import SkyModel, get_cellsize
@@ -157,17 +159,7 @@ def generate_meerkat_visibilities(
     Returns path to MS.
     """
     imaging_npixel = image.shape[-1]
-    vis_path = get_meerkat_visibilities_path(
-        image,
-        cache_dir,
-        os.path.basename(fits_file),
-        imaging_npixel,
-        number_of_time_steps,
-        start_frequency_hz,
-        end_frequency_hz,
-        number_of_channels,
-        random_position,
-    )
+    vis_path = Path(os.path.join(os.path.dirname(fits_file), os.path.basename(fits_file).split(".fits")[0] + ".ms"))
     metadata_path = vis_path.with_suffix(".meta.json")
 
     if vis_path.exists():
@@ -195,8 +187,13 @@ def generate_meerkat_visibilities(
         )
         cellsize = get_cellsize(sky, phase_center_ra, phase_center_dec, imaging_npixel)
 
-    # Setup MeerKAT
-    telescope = Telescope.constructor("MeerKAT", backend=SimulatorBackend.OSKAR)
+    # Setup SKA-LOW AA*
+    telescope = Telescope.constructor(
+    name="SKA-LOW-AAstar",
+    version=SKALowAAStarVersions.SKA_OST_ARRAY_CONFIG_2_3_1,
+    backend=SimulatorBackend.OSKAR,
+    )
+
 
     # From survey metadata
     frequency_increment_hz = math.floor(
@@ -205,11 +202,6 @@ def generate_meerkat_visibilities(
 
     # number_of_channels = 1
     print(f"number_of_channels={number_of_channels}")
-
-    c = 299792458.0
-    ref_freq = (start_frequency_hz + end_frequency_hz) / 2
-    wavelength = c / ref_freq
-    beam_fwhm_deg = np.degrees(1.2 * wavelength / 13)
 
     # Define observation
     observation = Observation(
@@ -249,11 +241,10 @@ def generate_meerkat_visibilities(
         )
 
         simulation = InterferometerSimulation(
+            max_time_per_samples = number_of_time_steps,
             channel_bandwidth_hz=frequency_increment_hz,
+            station_type="Aperture array",
             pol_mode=pol_mode,  # Scalar = 1pol / Full = 4 pol
-            station_type="Gaussian beam",
-            gauss_beam_fwhm_deg=beam_fwhm_deg,
-            gauss_ref_freq_hz=ref_freq,
             noise_enable=True,
             noise_start_freq=start_frequency_hz,
             noise_inc_freq=frequency_increment_hz,
@@ -265,11 +256,10 @@ def generate_meerkat_visibilities(
         )
     else:
         simulation = InterferometerSimulation(
+            max_time_per_samples = number_of_time_steps,
             channel_bandwidth_hz=frequency_increment_hz,
             pol_mode=pol_mode,  # Scalar = 1pol / Full = 4 pol
-            station_type="Gaussian beam",
-            gauss_beam_fwhm_deg=beam_fwhm_deg,
-            gauss_ref_freq_hz=ref_freq,
+            station_type="Aperture array",
             noise_enable=False,
             use_gpus=use_gpus,
         )

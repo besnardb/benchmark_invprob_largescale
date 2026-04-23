@@ -346,3 +346,15 @@ def compute_psnr(reconstruction, reference, max_pixel=1.0):
     if mse <= 0.0:
         return float("inf")
     return 10.0 * math.log10((max_pixel**2) / mse)
+
+def compute_asinh_psnr(reconstruction, reference, max_pixel=1.0):
+    """Compute asinh-PSNR in dB."""
+    beta = max_pixel * 1e-2  # softening scale: transition at 1% of peak
+    asinh_gt = torch.arcsinh(reference / beta)
+    asinh_recon = torch.arcsinh(reconstruction / beta)
+    asinh_range = math.asinh(max_pixel / beta) - math.asinh(max_pixel / beta)
+    mse_asinh = ((asinh_recon - asinh_gt) ** 2).mean().item()
+    asinh_psnr = (
+        10.0 * math.log10(asinh_range**2 / mse_asinh) if mse_asinh > 0 else float("inf")
+    )
+    return asinh_psnr
