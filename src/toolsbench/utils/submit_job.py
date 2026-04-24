@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import time
+import sys
 from pathlib import Path
 
 import yaml
@@ -43,6 +45,7 @@ def resolve_image_path(config: dict, image_override: str | None) -> Path:
 
 
 def run_simulation(
+    args,
     config: dict,
     image_override: str | None = None,
 ) -> None:
@@ -64,7 +67,8 @@ def run_simulation(
 
     container_cache = f"{mount_point}/debug_output/cache"
     container_mpl = f"{mount_point}/debug_output/mpl_cache"
-    config_path = f"{working_dir}/install_scripts/config_slurm.yaml"
+    config_name = os.path.basename(args.config)
+    config_path = f"{working_dir}/install_scripts/{config_name}"
 
     cmd = [
         runtime,
@@ -91,6 +95,7 @@ def run_simulation(
 
 
 def submit_slurm_job(
+    args,
     config: dict,
     image_override: str | None = None,
 ) -> None:
@@ -149,9 +154,9 @@ def submit_slurm_job(
 
     executor.update_parameters(**kwargs)
     print(f"Submitting Slurm job with parameters: {kwargs}")
-    job = executor.submit(run_simulation, config, image_override)
+    job = executor.submit(run_simulation, args, config, image_override)
     print(f"Submitted job {job.job_id}, waiting for completion...")
-
+    sys.exit()
     poll_interval_seconds = int(slurm_conf.get("poll_interval_seconds", 30))
     wait_timeout_seconds = int(slurm_conf.get("wait_timeout_seconds", 7200))
     deadline = time.time() + wait_timeout_seconds
@@ -224,9 +229,9 @@ def main() -> None:
 
     if args.local:
         print("Running locally...")
-        run_simulation(config, args.image_path)
+        run_simulation(args, config, args.image_path)
     else:
-        submit_slurm_job(config, args.image_path)
+        submit_slurm_job(args, config, args.image_path)
 
 
 if __name__ == "__main__":

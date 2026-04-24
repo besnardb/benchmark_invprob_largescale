@@ -6,7 +6,7 @@ job:
   image_size: [1024]
   data_path: "./data/radio_interferometry"
   use_gpus: True
-  number_of_time_steps: 75
+  number_of_time_steps: 1024
   start_frequency_hz: 100e6
   end_frequency_hz: 103e6
   number_of_channels: 32

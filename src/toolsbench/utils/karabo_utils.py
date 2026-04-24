@@ -7,7 +7,7 @@ from datetime import timedelta, timezone, datetime
 from astropy.time import Time
 from astropy.io import fits
 
-from karabo.simulation.telescope_versions import SKALowAAStarVersions
+from karabo.simulation.telescope_versions import SKALowAAStarVersions, SKALowAA2Versions
 from karabo.simulation.interferometer import InterferometerSimulation
 from karabo.simulation.observation import Observation
 from karabo.simulation.sky_model import SkyModel, get_cellsize
@@ -17,6 +17,7 @@ from karabo.calibration.noise_rms import ska_low_noise_rms
 
 from toolsbench.utils.radio_utils import (
     MEERKAT_LOCATION,
+    SKALOW_LOCATION,
     draw_random_pointing,
     get_cellsize_from_fits_wcs,
     get_meerkat_visibilities_path,
@@ -25,6 +26,7 @@ from toolsbench.utils.radio_utils import (
 
 
 def set_phase_center(
+    telescope_name,
     pos_ra,
     pos_dec,
     random_position,
@@ -38,7 +40,8 @@ def set_phase_center(
     n_simulations = 1
     # Observation data and time
     # zenith at MeerKAT around 18:36 UTC with RA=155.66367, Dec=-30.7130
-    obs_date_time = datetime(2020, 4, 26, 16, 36, 0, 0, timezone.utc)
+    obs_date_time = datetime(2020, 4, 26, 18, 36, 0, 0, timezone.utc)
+    telescope_location = MEERKAT_LOCATION if telescope_name == "MeerKAT" else SKALOW_LOCATION
 
     if random_position:
         try:
@@ -51,7 +54,7 @@ def set_phase_center(
 
                 phase_center_ra, phase_center_dec = draw_random_pointing(
                     time=Time(obs_date_time),
-                    observer=MEERKAT_LOCATION,
+                    observer=telescope_location,
                     min_elevation_deg=min_elevation,
                 )
 
@@ -61,7 +64,7 @@ def set_phase_center(
                     dec_deg=phase_center_dec,
                     obs_start_time=obs_date_time,
                     obs_duration=approx_duration,
-                    telescope_location=MEERKAT_LOCATION,
+                    telescope_location=telescope_location,
                     min_elevation_deg=min_elevation,
                 ):
                     break
@@ -169,8 +172,28 @@ def generate_meerkat_visibilities(
     cache_dir.mkdir(parents=True, exist_ok=True)
     print(f"Generating new visibilities for MeerKAT in {vis_path}")
 
+    # Setup SKA-LOW AA*
+    # telescope = Telescope.constructor(
+    # name="SKA-LOW-AAstar",
+    # version=SKALowAAStarVersions.SKA_OST_ARRAY_CONFIG_2_3_1,
+    # backend=SimulatorBackend.OSKAR,
+    # )
+
+    # Setup SKA-LOW AA2
+    telescope = Telescope.constructor(
+    name="SKA-LOW-AA2",
+    version=SKALowAA2Versions.SKA_OST_ARRAY_CONFIG_2_3_1,
+    backend=SimulatorBackend.OSKAR,
+    )
+
+    # Setup MeerKAT
+    # telescope = Telescope.constructor(
+    #     name="MeerKAT",
+    #     backend=SimulatorBackend.OSKAR,
+    # )
+
     phase_center_ra, phase_center_dec, obs_date_time = set_phase_center(
-        pos_ra, pos_dec, random_position, number_of_time_steps
+        telescope_name=telescope.name, pos_ra=pos_ra, pos_dec=pos_dec, random_position=random_position, number_of_time_steps=number_of_time_steps
     )
 
     sky, max_flux, image_rms, dynamic_range = image_to_skymodel(
@@ -186,14 +209,6 @@ def generate_meerkat_visibilities(
             "Falling back to SkyModel-derived cellsize."
         )
         cellsize = get_cellsize(sky, phase_center_ra, phase_center_dec, imaging_npixel)
-
-    # Setup SKA-LOW AA*
-    telescope = Telescope.constructor(
-    name="SKA-LOW-AAstar",
-    version=SKALowAAStarVersions.SKA_OST_ARRAY_CONFIG_2_3_1,
-    backend=SimulatorBackend.OSKAR,
-    )
-
 
     # From survey metadata
     frequency_increment_hz = math.floor(

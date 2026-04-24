@@ -20,6 +20,11 @@ MEERKAT_LOCATION = EarthLocation(
     lat=-30.83 * u.deg, lon=21.33 * u.deg, height=1195.0 * u.m
 )
 
+SKALOW_LOCATION = EarthLocation(
+    lat=-26.7 * u.deg,
+    lon=116.76 * u.deg,
+    height=300.0 * u.m
+)
 
 def load_and_resize_image(image_path, image_size, normalize=False):
     """Load and resize a FITS image.
