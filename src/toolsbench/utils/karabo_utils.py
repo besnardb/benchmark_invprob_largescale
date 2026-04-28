@@ -41,8 +41,8 @@ def set_phase_center(
     # Observation data and time
     # zenith at MeerKAT around 18:36 UTC with RA=155.66367, Dec=-30.7130
     obs_date_time = datetime(2020, 4, 26, 18, 36, 0, 0, timezone.utc)
-    telescope_location = MEERKAT_LOCATION if telescope_name == "MeerKAT" else SKALOW_LOCATION
-
+    telescope_location = MEERKAT_LOCATION if telescope_name == "meerkat" else SKALOW_LOCATION
+    
     if random_position:
         try:
             # Convert obs_date_time to astropy Time
@@ -180,17 +180,17 @@ def generate_meerkat_visibilities(
     # )
 
     # Setup SKA-LOW AA2
-    telescope = Telescope.constructor(
-    name="SKA-LOW-AA2",
-    version=SKALowAA2Versions.SKA_OST_ARRAY_CONFIG_2_3_1,
-    backend=SimulatorBackend.OSKAR,
-    )
+    # telescope = Telescope.constructor(
+    # name="SKA-LOW-AA2",
+    # version=SKALowAA2Versions.SKA_OST_ARRAY_CONFIG_2_3_1,
+    # backend=SimulatorBackend.OSKAR,
+    # )
 
     # Setup MeerKAT
-    # telescope = Telescope.constructor(
-    #     name="MeerKAT",
-    #     backend=SimulatorBackend.OSKAR,
-    # )
+    telescope = Telescope.constructor(
+        name="MeerKAT",
+        backend=SimulatorBackend.OSKAR,
+    )
 
     phase_center_ra, phase_center_dec, obs_date_time = set_phase_center(
         telescope_name=telescope.name, pos_ra=pos_ra, pos_dec=pos_dec, random_position=random_position, number_of_time_steps=number_of_time_steps
