@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union, Sequence
+from typing import Optional, Tuple, Union, Sequence, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -291,33 +291,7 @@ class DeepinvDirtyImager(torch.nn.Module):
         # Reshape for compatibility with rest of code
         visibilities_reshaped = all_visibilities.unsqueeze(0).unsqueeze(0)
 
-        # Apply uniform weighting
-        weights, valid_mask = self.uniform_weighting(
-            samples_locs[0, :], samples_locs[1, :], im_size=im_size, device=self.device
-        )
-
-        # Filter out-of-bounds visibilities
-        samples_locs = samples_locs[:, valid_mask]
-        visibilities_reshaped = visibilities_reshaped[:, :, valid_mask]
-
-        return samples_locs, weights, visibilities_reshaped
-
-    @staticmethod
-    def get_cellsize(sky_model, phase_center_ra, phase_center_dec, imaging_npixel):
-        # Derive imaging grid directly from sky model extent to guarantee pixel alignment
-        ra_values = sky_model[:, 0].to_numpy()
-        dec_values = sky_model[:, 1].to_numpy()
-
-        delta_ra = (ra_values - phase_center_ra) * np.cos(np.radians(phase_center_dec))
-        delta_dec = dec_values - phase_center_dec
-        max_ra_extent = np.max(np.abs(delta_ra))
-        max_dec_extent = np.max(np.abs(delta_dec))
-        half_fov_deg = max(max_ra_extent, max_dec_extent)
-        fov_deg = 2.0 * half_fov_deg
-        fov_rad = math.radians(fov_deg)
-        imaging_cellsize = fov_rad / imaging_npixel
-
-        return imaging_cellsize
+        return samples_locs, visibilities_reshaped
 
     @staticmethod
     def uniform_weighting(
@@ -325,14 +299,9 @@ class DeepinvDirtyImager(torch.nn.Module):
         v: torch.Tensor,
         im_size: torch.Tensor,
         weight_gridsize: int = 1,
-        kernel_size: int = 5,
         device=DEFAULT_DEVICE,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Optimized uniform weighting calculation for CPU/GPU
-
-
-        device: torch.device
-            Device to use for computations, it should match the self device.
+        """Strict uniform weighting: w_i = 1 / n(cell_i).
         """
 
         dtype = torch.float32
@@ -344,47 +313,118 @@ class DeepinvDirtyImager(torch.nn.Module):
         v_sym = torch.where(flip_mask, -v, v)
 
         # Grid indices calculation
-        p = ((u_sym + 1) * N0 / 2).floor().to(torch.int64)
-        q = ((v_sym + 1) * N1 / 2).floor().to(torch.int64)
+        p = ((u_sym + np.pi) * N0 / (2 * np.pi)).floor().to(torch.int64)
+        q = ((v_sym + np.pi) * N1 / (2 * np.pi)).floor().to(torch.int64)
 
         # Validity mask
         valid_mask = (p >= 0) & (p < N0) & (q >= 0) & (q < N1)
         p_valid = p[valid_mask]
         q_valid = q[valid_mask]
 
-        uvInd = p_valid * N1 + q_valid
+        if p_valid.numel() == 0:
+                return (
+                    torch.empty((0,), dtype=dtype, device=device),
+                    valid_mask.to(device),
+                )
 
-        # Weight calculation with optimized memory management
-        gridded_weights = torch.zeros(N0 * N1, dtype=dtype, device=device)
-        gridded_weights.scatter_add_(0, uvInd, torch.ones_like(uvInd, dtype=dtype))
+        uvInd = (p_valid * N1 + q_valid).to(torch.int64)
 
-        # Reshaping and filter application
-        gridded_weights_2d = gridded_weights.view(1, 1, N0, N1)
-
-        if device.type == "cuda":
-            # Version optimisée GPU
-            gridded_weights_2d = torch.nn.functional.avg_pool2d(
-                gridded_weights_2d,
-                kernel_size=kernel_size,
-                stride=1,
-                padding=kernel_size // 2,
-            )
-        else:
-            # Version CPU - utilise des opérations plus efficaces
-            kernel = torch.ones(1, 1, kernel_size, kernel_size, dtype=dtype) / (
-                kernel_size * kernel_size
-            )
-            gridded_weights_2d = torch.nn.functional.conv2d(
-                gridded_weights_2d, kernel, padding=kernel_size // 2
-            )
-
-        gridded_weights_2d = gridded_weights_2d.squeeze()
-        gridded_weights_flat = gridded_weights_2d.contiguous().view(-1)
-
-        # Calcul des poids finaux avec protection contre division par zéro
-        weights = 1.0 / torch.clamp(gridded_weights_flat[uvInd], min=1e-8)
+        counts = torch.bincount(uvInd, minlength=N0 * N1).to(dtype)
+        weights = 1.0 / torch.clamp(counts[uvInd], min=1.0)
 
         return weights, valid_mask
+    
+    @staticmethod
+    def natural_weighting(
+        u: torch.Tensor,
+        v: torch.Tensor,
+        im_size: torch.Tensor,
+        weight_gridsize: int = 1,
+        device=DEFAULT_DEVICE,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Natural weighting: w_i = 1 for all visibilities.
+
+        Returns:
+            weights:    [N] all-ones weights for valid visibilities
+            valid_mask: [N_total] boolean mask of in-bounds visibilities
+        """
+
+        dtype = torch.float32
+        N0, N1 = [int(i * weight_gridsize) for i in im_size]
+
+        flip_mask = v < 0
+        u_sym = torch.where(flip_mask, -u, u)
+        v_sym = torch.where(flip_mask, -v, v)
+
+        p = ((u_sym + np.pi) * N0 / (2 * np.pi)).floor().to(torch.int64)
+        q = ((v_sym + np.pi) * N1 / (2 * np.pi)).floor().to(torch.int64)
+
+        valid_mask = (p >= 0) & (p < N0) & (q >= 0) & (q < N1)
+        n_valid = int(valid_mask.sum().item())
+
+        if n_valid == 0:
+            return (
+                torch.empty((0,), dtype=dtype, device=device),
+                valid_mask.to(device),
+            )
+
+        weights = torch.ones(n_valid, dtype=dtype, device=device)
+        return weights, valid_mask.to(device)
+
+    @staticmethod
+    def briggs_weighting(
+        u: torch.Tensor,
+        v: torch.Tensor,
+        im_size: torch.Tensor,
+        robust: float = 0.0,
+        weight_gridsize: int = 1,
+        device=DEFAULT_DEVICE,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Briggs robust weighting.
+
+        Args:
+            robust: Briggs parameter in [-2, +2].
+                    -2 ≈ uniform  (high resolution, more noise)
+                     0   balanced (default)
+                    +2 ≈ natural  (best sensitivity)
+
+        Returns:
+            weights:    [N] Briggs weights for valid visibilities
+            valid_mask: [N_total] boolean mask of in-bounds visibilities
+        """
+
+        dtype = torch.float32
+        N0, N1 = [int(i * weight_gridsize) for i in im_size]
+
+        flip_mask = v < 0
+        u_sym = torch.where(flip_mask, -u, u)
+        v_sym = torch.where(flip_mask, -v, v)
+
+        p = ((u_sym + np.pi) * N0 / (2 * np.pi)).floor().to(torch.int64)
+        q = ((v_sym + np.pi) * N1 / (2 * np.pi)).floor().to(torch.int64)
+
+        valid_mask = (p >= 0) & (p < N0) & (q >= 0) & (q < N1)
+        p_valid = p[valid_mask]
+        q_valid = q[valid_mask]
+
+        if p_valid.numel() == 0:
+            return (
+                torch.empty((0,), dtype=dtype, device=device),
+                valid_mask.to(device),
+            )
+
+        uvInd = (p_valid * N1 + q_valid).to(torch.int64)
+        counts = torch.bincount(uvInd, minlength=N0 * N1).to(dtype)  # n_i per cell
+
+        # Briggs f^2 factor (calibrated so robust=±2 matches natural/uniform)
+        N_total = float(p_valid.numel())
+        sum_n2  = float((counts ** 2).sum().item())
+        f2 = (5.0 * 10.0 ** (-robust)) ** 2 * N_total / (sum_n2 + 1e-30)
+
+        n_i = counts[uvInd]                              # density at each sample
+        weights = 1.0 / (1.0 + n_i * f2)
+
+        return weights.to(device), valid_mask.to(device)
 
     @staticmethod
     def display_uv_coverage(
@@ -417,62 +457,61 @@ class DeepinvDirtyImager(torch.nn.Module):
             Device to use for computations, it should match the self device.
         """
 
-        visibilities = visibilities.squeeze()  # [N]
-        weights = weights.squeeze()  # [N]
-        u, v = uv_coords[0], uv_coords[1]  # [N]
+        """Reduce visibilities by weighted gridding onto a coarser UV grid.
 
-        u_norm = (u - u.min()) / (u.max() - u.min())
-        v_norm = (v - v.min()) / (v.max() - v.min())
+        Returns:
+            binned_uv:  [2, M]    weighted-mean UV coordinates per non-empty cell
+            w_bin:      [M]       summed weights per cell (pass to physics.setWeight)
+            vis_binned: [1, 1, M] weighted-mean visibility per cell
+        """
 
-        u_idx = (u_norm * (grid_size - 1)).long()
-        v_idx = (v_norm * (grid_size - 1)).long()
-        idx = u_idx + v_idx * grid_size  # [N]
+        vis = visibilities.squeeze().to(torch.complex64)     # [N]
+        w   = weights.squeeze().to(torch.float32)            # [N]
+        u   = uv_coords[0].to(torch.float32)                 # [N]
+        v   = uv_coords[1].to(torch.float32)                 # [N]
 
+        # Grid indices: [-pi, pi] -> [0, grid_size)
+        p = ((u + np.pi) * grid_size / (2 * np.pi)).floor().clamp(0, grid_size - 1).to(torch.int64)
+        q = ((v + np.pi) * grid_size / (2 * np.pi)).floor().clamp(0, grid_size - 1).to(torch.int64)
+
+        idx      = p * grid_size + q   # [N]
         max_bins = grid_size * grid_size
 
-        sum_wu = torch.zeros(max_bins, device=device)
-        sum_wv = torch.zeros(max_bins, device=device)
-        sum_wvis_real = torch.zeros(max_bins, device=device)
-        sum_wvis_imag = torch.zeros(max_bins, device=device)
-        sum_w = torch.zeros(max_bins, device=device)
+        sum_wu  = torch.zeros(max_bins, dtype=torch.float32, device=device)
+        sum_wv  = torch.zeros(max_bins, dtype=torch.float32, device=device)
+        sum_wvr = torch.zeros(max_bins, dtype=torch.float32, device=device)
+        sum_wvi = torch.zeros(max_bins, dtype=torch.float32, device=device)
+        sum_w   = torch.zeros(max_bins, dtype=torch.float32, device=device)
 
-        sum_wu.index_add_(0, idx, u * weights)
-        sum_wv.index_add_(0, idx, v * weights)
-        sum_wvis_real.index_add_(0, idx, visibilities.real * weights)
-        sum_wvis_imag.index_add_(0, idx, visibilities.imag * weights)
-        sum_w.index_add_(0, idx, weights)
+        sum_wu.index_add_(0, idx, w * u)
+        sum_wv.index_add_(0, idx, w * v)
+        sum_wvr.index_add_(0, idx, w * vis.real.to(torch.float32))
+        sum_wvi.index_add_(0, idx, w * vis.imag.to(torch.float32))
+        sum_w.index_add_(0, idx, w)
 
         mask = sum_w > 0
+        w_bin      = sum_w[mask]                                          # [M]
+        u_binned   = sum_wu[mask]  / w_bin                                # [M]
+        v_binned   = sum_wv[mask]  / w_bin                                # [M]
+        vis_binned = (sum_wvr[mask] + 1j * sum_wvi[mask]) / w_bin        # [M]
 
-        u_binned = sum_wu[mask] / sum_w[mask]
-        v_binned = sum_wv[mask] / sum_w[mask]
+        binned_uv  = torch.stack([u_binned, v_binned], dim=0)            # [2, M]
+        vis_binned = vis_binned.unsqueeze(0).unsqueeze(0)                 # [1, 1, M]
 
-        vis_binned = (sum_wvis_real[mask] + 1j * sum_wvis_imag[mask]) / sum_w[mask]
-        w_binned = sum_w[mask]
-
-        binned_uv = torch.stack([u_binned, v_binned], dim=0)  # [2, M]
-        vis_binned = vis_binned.unsqueeze(0).unsqueeze(0)  # [1,1,M]
-
-        return binned_uv, w_binned, vis_binned
+        return binned_uv, w_bin, vis_binned
 
     def create_deepinv_physics(
         self,
         visibility_path: Path,
         visibility_format: str,
         visibility_column: str,
+        weighting: Literal["uniform", "natural", "briggs"] = "uniform",
+        briggs_robust: float = 0.0,
         bin_data: bool = False,
         imaging_npixel: Optional[int] = None,
         binning_factor: Optional[float] = None,
     ):
-        # Load data
-        uvw, visibilities, freqs = self.load_visibilities(
-            visibility_path, visibility_format, visibility_column
-        )
-        # Normalize uv coords and compute weights
-        samples_locs, weights, visibilities = self.normalize_uv_coords(
-            uvw, freqs, visibilities
-        )
-
+        
         # Update default paramseters if provided
         imaging_npixel = (
             imaging_npixel if imaging_npixel is not None else self.config.imaging_npixel
@@ -480,6 +519,32 @@ class DeepinvDirtyImager(torch.nn.Module):
         binning_factor = (
             binning_factor if binning_factor is not None else self.config.binning_factor
         )
+
+        # Load data
+        uvw, visibilities, freqs = self.load_visibilities(
+            visibility_path, visibility_format, visibility_column
+        )
+        # Normalize uv coords and compute weights
+        samples_locs, visibilities = self.normalize_uv_coords(
+            uvw, freqs, visibilities
+        )
+
+        im_size = torch.tensor(
+            [imaging_npixel, imaging_npixel], device=self.device
+        )
+
+        if weighting == "uniform":
+            weights, valid_mask = self.uniform_weighting(samples_locs[0], samples_locs[1], im_size)
+        elif weighting == "natural":
+            weights, valid_mask = self.natural_weighting(samples_locs[0], samples_locs[1], im_size)
+        elif weighting == "briggs":
+            weights, valid_mask = self.briggs_weighting(
+                samples_locs[0], samples_locs[1], im_size, robust=briggs_robust
+            )
+        else:
+            raise ValueError(f"Unknown weighting scheme '{weighting}'. Choose from: uniform, natural, briggs")
+        samples_locs = samples_locs[:, valid_mask]
+        visibilities = visibilities[:, :, valid_mask]
 
         if bin_data:
             samples_locs, weights, visibilities = self.bin_uv_data(
@@ -510,19 +575,12 @@ class DeepinvDirtyImager(torch.nn.Module):
         visibility_path: Path,
         visibility_format: str,
         visibility_column: str,
+        weighting: Literal["uniform", "natural", "briggs"] = "uniform",
+        briggs_robust: float = 0.0,
         bin_data: bool = False,
         imaging_npixel: Optional[int] = None,
         binning_factor: Optional[float] = None,
     ):
-        # Load data
-        uvw, visibilities, freqs = self.load_visibilities(
-            visibility_path, visibility_format, visibility_column
-        )
-        # Normalize uv coords and compute weights
-        samples_locs, weights, visibilities = self.normalize_uv_coords(
-            uvw, freqs, visibilities
-        )
-
         # Update default paramseters if provided
         imaging_npixel = (
             imaging_npixel if imaging_npixel is not None else self.config.imaging_npixel
@@ -530,6 +588,31 @@ class DeepinvDirtyImager(torch.nn.Module):
         binning_factor = (
             binning_factor if binning_factor is not None else self.config.binning_factor
         )
+
+        # Load data
+        uvw, visibilities, freqs = self.load_visibilities(
+            visibility_path, visibility_format, visibility_column
+        )
+        # Normalize uv coords and compute weights
+        samples_locs, visibilities = self.normalize_uv_coords(
+            uvw, freqs, visibilities
+        )
+
+        im_size = torch.tensor(
+            [imaging_npixel, imaging_npixel], device=self.device
+        )
+        if weighting == "uniform":
+            weights, valid_mask = self.uniform_weighting(samples_locs[0], samples_locs[1], im_size)
+        elif weighting == "natural":
+            weights, valid_mask = self.natural_weighting(samples_locs[0], samples_locs[1], im_size)
+        elif weighting == "briggs":
+            weights, valid_mask = self.briggs_weighting(
+                samples_locs[0], samples_locs[1], im_size, robust=briggs_robust
+            )
+        else:
+            raise ValueError(f"Unknown weighting scheme '{weighting}'. Choose from: uniform, natural, briggs")
+        samples_locs = samples_locs[:, valid_mask]
+        visibilities = visibilities[:, :, valid_mask]
 
         if bin_data:
             samples_locs, weights, visibilities = self.bin_uv_data(
