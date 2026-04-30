@@ -155,7 +155,8 @@ class Objective(BaseObjective):
             # )
 
             # asinh-PSNR
-            beta = self.max_pixel * 1e-2  # softening scale: transition at 1% of peak
+            p99 = torch.quantile(ground_truth.flatten(), 0.99)
+            beta = (p99 * 1).item()  # Scale factor for asinh transformation
             asinh_gt = torch.arcsinh(ground_truth / beta)
             asinh_recon = torch.arcsinh(reconstruction / beta)
             asinh_range = math.asinh(self.max_pixel / beta) - math.asinh(self.min_pixel / beta)
@@ -176,6 +177,7 @@ class Objective(BaseObjective):
                 evaluation_count=self.evaluation_count,
                 vmin=self.min_pixel,
                 vmax=self.max_pixel,
+                beta_display=beta,
             )
 
             reconstruction_np = (

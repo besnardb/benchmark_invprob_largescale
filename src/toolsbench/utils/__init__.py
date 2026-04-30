@@ -130,6 +130,7 @@ def save_comparison_figure(
     evaluation_count=None,
     vmin=None,
     vmax=None,
+    beta_display=None,
 ):
     """Save a comparison figure showing ground truth and reconstruction side by side.
 
@@ -186,7 +187,9 @@ def save_comparison_figure(
     axes[0, 1].axis("off")
 
     # --- Row 1: asinh scale ---
-    beta_display = max(gt_img.max() * 1e-2, 1e-10)
+    if beta_display is None:
+        p99 = torch.quantile(gt_img.flatten(), 0.99)
+        beta_display = (p99 * 1).item()  # Scale factor for asinh transformation
     asinh_gt_img = np.arcsinh(gt_img / beta_display)
     asinh_recon_img = np.arcsinh(recon_img / beta_display)
     asinh_vmin = np.arcsinh(gt_img.min() / beta_display)
@@ -349,7 +352,8 @@ def compute_psnr(reconstruction, reference, max_pixel=1.0):
 
 def compute_asinh_psnr(reconstruction, reference, max_pixel=1.0):
     """Compute asinh-PSNR in dB."""
-    beta = max_pixel * 1e-2  # softening scale: transition at 1% of peak
+    p99 = torch.quantile(reference.flatten(), 0.99)
+    beta = (p99 * 1).item()  # Scale factor for asinh transformation
     asinh_gt = torch.arcsinh(reference / beta)
     asinh_recon = torch.arcsinh(reconstruction / beta)
     asinh_range = math.asinh(max_pixel / beta) - math.asinh(max_pixel / beta)
