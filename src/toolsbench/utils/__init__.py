@@ -352,7 +352,11 @@ def compute_psnr(reconstruction, reference, max_pixel=1.0):
 
 def compute_asinh_psnr(reconstruction, reference, max_pixel=1.0):
     """Compute asinh-PSNR in dB."""
-    p99 = torch.quantile(reference.flatten(), 0.99)
+    vals = reference.flatten()
+    if vals.numel() > 1e6:
+        idx = torch.randint(0, vals.numel(), (int(1e6),), device=vals.device)
+        vals = vals[idx]
+    p99 = torch.quantile(vals, 0.99)
     beta = (p99 * 1).item()  # Scale factor for asinh transformation
     asinh_gt = torch.arcsinh(reference / beta)
     asinh_recon = torch.arcsinh(reconstruction / beta)

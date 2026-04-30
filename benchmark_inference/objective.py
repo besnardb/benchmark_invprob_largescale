@@ -155,7 +155,11 @@ class Objective(BaseObjective):
             # )
 
             # asinh-PSNR
-            p99 = torch.quantile(ground_truth.flatten(), 0.99)
+            vals = ground_truth.flatten()
+            if vals.numel() > 1e6:
+                idx = torch.randint(0, vals.numel(), (int(1e6),), device=vals.device)
+                vals = vals[idx]
+            p99 = torch.quantile(vals, 0.99)
             beta = (p99 * 1).item()  # Scale factor for asinh transformation
             asinh_gt = torch.arcsinh(ground_truth / beta)
             asinh_recon = torch.arcsinh(reconstruction / beta)
