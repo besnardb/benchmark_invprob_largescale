@@ -308,6 +308,7 @@ class Solver(BaseSolver):
                         scale = sig_max - sig_min
                         # Linear map to [0, 1] for DRUNet
                         self.reconstruction = (self.reconstruction - sig_min) / scale
+                        self.reconstruction = torch.clamp(self.reconstruction, 0, 1)
 
                         # Denoiser (DRUNet always receives and returns values in [0, 1]).
                         if self.denoiser_lambda_relaxation is None:

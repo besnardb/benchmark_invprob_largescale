@@ -98,14 +98,14 @@ def save_measurements_figure(
 
     # Plot ground truth
     gt_img = tensor_to_numpy(ground_truth, clip=False)
-    axes_flat[0].imshow(gt_img, cmap="gray" if gt_img.ndim == 2 else None)
+    axes_flat[0].imshow(gt_img, cmap="plasma" if gt_img.ndim == 2 else None)
     axes_flat[0].set_title("Ground Truth", fontsize=12, fontweight="bold")
     axes_flat[0].axis("off")
 
     # Plot measurements
     for i, meas in enumerate(measurement):
         meas_img = tensor_to_numpy(meas)
-        axes_flat[i + 1].imshow(meas_img, cmap="gray" if meas_img.ndim == 2 else None)
+        axes_flat[i + 1].imshow(meas_img, cmap="plasma" if meas_img.ndim == 2 else None)
         axes_flat[i + 1].set_title(f"Measurement {i + 1}", fontsize=12)
         axes_flat[i + 1].axis("off")
 
@@ -167,7 +167,7 @@ def save_comparison_figure(
     # --- Row 0: linear scale ---
     axes[0, 0].imshow(
         gt_img,
-        cmap="gray" if gt_img.ndim == 2 else None,
+        cmap="plasma" if gt_img.ndim == 2 else None,
         vmin=vmin,
         vmax=vmax,
     )
@@ -175,11 +175,9 @@ def save_comparison_figure(
     axes[0, 0].axis("off")
 
     recon_title = f"Reconstruction (linear)\nPSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}"
-    if asinh_psnr is not None:
-        recon_title += f"\nasinh-PSNR: {asinh_psnr:.2f} dB"
     axes[0, 1].imshow(
         recon_img,
-        cmap="gray" if recon_img.ndim == 2 else None,
+        cmap="plasma" if recon_img.ndim == 2 else None,
         vmin=vmin,
         vmax=vmax,
     )
@@ -188,8 +186,7 @@ def save_comparison_figure(
 
     # --- Row 1: asinh scale ---
     if beta_display is None:
-        p99 = torch.quantile(gt_img.flatten(), 0.99)
-        beta_display = (p99 * 1).item()  # Scale factor for asinh transformation
+        beta_display = gt_img.pow(2).mean().sqrt().clamp(min=1e-12).item()
     asinh_gt_img = np.arcsinh(gt_img / beta_display)
     asinh_recon_img = np.arcsinh(recon_img / beta_display)
     asinh_vmin = np.arcsinh(gt_img.min() / beta_display)
@@ -197,7 +194,7 @@ def save_comparison_figure(
 
     axes[1, 0].imshow(
         asinh_gt_img,
-        cmap="gray" if asinh_gt_img.ndim == 2 else None,
+        cmap="plasma" if asinh_gt_img.ndim == 2 else None,
         vmin=asinh_vmin,
         vmax=asinh_vmax,
     )
@@ -206,11 +203,14 @@ def save_comparison_figure(
 
     axes[1, 1].imshow(
         asinh_recon_img,
-        cmap="gray" if asinh_recon_img.ndim == 2 else None,
+        cmap="plasma" if asinh_recon_img.ndim == 2 else None,
         vmin=asinh_vmin,
         vmax=asinh_vmax,
     )
-    axes[1, 1].set_title("Reconstruction (asinh)", fontsize=13, fontweight="bold")
+    recon_title_asinh = f"Reconstruction (asinh)"
+    if asinh_psnr is not None:
+        recon_title_asinh += f"\nasinh-PSNR: {asinh_psnr:.2f} dB"
+    axes[1, 1].set_title(recon_title_asinh, fontsize=13, fontweight="bold")
     axes[1, 1].axis("off")
 
     # Add overall title if evaluation count provided

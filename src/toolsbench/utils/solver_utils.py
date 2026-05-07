@@ -73,10 +73,7 @@ def initialize_reconstruction(
 
     elif method == "pseudo_inverse":
         if weights is not None:
-            # Create a temporary weighted operator for a sharper init
-            weighted_op = copy.deepcopy(operator)
-            weighted_op.setWeight(weights.to(device))
-            dirty = weighted_op.A_dagger(measurements)
+            dirty = operator.A_dagger(measurements*weights.to(device))
         else:
             dirty = operator.A_dagger(measurements)
 
@@ -89,10 +86,7 @@ def initialize_reconstruction(
 
     elif method == "adjoint":
         if weights is not None:
-            # Create a temporary weighted operator for a sharper init
-            weighted_op = copy.deepcopy(operator)
-            weighted_op.setWeight(weights.to(device))
-            dirty = weighted_op.A_adjoint(measurements)
+            dirty = operator.A_adjoint(measurements*weights.to(device))
         else:
             dirty = operator.A_adjoint(measurements)
 
