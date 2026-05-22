@@ -218,7 +218,7 @@ def is_source_visible(
 def draw_random_pointing(
     time: Time,
     observer: EarthLocation = MEERKAT_LOCATION,
-    min_elevation_deg: float = 15.0,
+    min_elevation_deg: float = 30.0,
     max_attempts: int = 1000,
     n_azimuth_samples: int = 360,
 ) -> tuple:

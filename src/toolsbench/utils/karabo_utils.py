@@ -13,7 +13,7 @@ from karabo.simulation.observation import Observation
 from karabo.simulation.sky_model import SkyModel, get_cellsize
 from karabo.simulation.telescope import Telescope
 from karabo.simulator_backend import SimulatorBackend
-from karabo.calibration.noise_rms import ska_low_noise_rms
+from karabo.calibration.noise_rms import ska_low_noise_rms, meerkat_noise_rms
 
 from toolsbench.utils.radio_utils import (
     MEERKAT_LOCATION,
@@ -193,7 +193,7 @@ def generate_meerkat_visibilities(
     )
 
     phase_center_ra, phase_center_dec, obs_date_time = set_phase_center(
-        telescope_name=telescope.name, pos_ra=pos_ra, pos_dec=pos_dec, random_position=random_position, number_of_time_steps=number_of_time_steps
+        telescope_name=telescope.name, pos_ra=pos_ra, pos_dec=pos_dec, random_position=random_position, number_of_time_steps=number_of_time_steps, min_elevation=30.0
     )
 
     sky, max_flux, image_rms, dynamic_range = image_to_skymodel(
@@ -232,26 +232,27 @@ def generate_meerkat_visibilities(
 
     rms_start = None
     rms_end = None
+    telescope_noise_rms = meerkat_noise_rms if telescope.name.lower() == "meerkat" else ska_low_noise_rms
     if add_noise:
 
-        rms_start = ska_low_noise_rms(
+        rms_start = telescope_noise_rms(
             freq_hz=start_frequency_hz,
             bandwidth_hz=frequency_increment_hz,
             integration_time_s=number_of_time_steps * 7.997,
         )
 
-        rms_end = ska_low_noise_rms(
+        rms_end = telescope_noise_rms(
             freq_hz=end_frequency_hz,
             bandwidth_hz=frequency_increment_hz,
             integration_time_s=number_of_time_steps * 7.997,
         )
 
         print(
-            f"RMS start frequency ({start_frequency_hz/1e6} MHz): {rms_start} Jy/beam",
+            f"RMS start frequency ({start_frequency_hz/1e6} MHz): {rms_start} Jy",
             flush=True,
         )
         print(
-            f"RMS end frequency ({end_frequency_hz/1e6} MHz): {rms_end} Jy/beam",
+            f"RMS end frequency ({end_frequency_hz/1e6} MHz): {rms_end} Jy",
             flush=True,
         )
 
@@ -276,6 +277,7 @@ def generate_meerkat_visibilities(
             pol_mode=pol_mode,  # Scalar = 1pol / Full = 4 pol
             station_type="Aperture array",
             noise_enable=False,
+            cuda_device_ids="6",
             use_gpus=use_gpus,
         )
 
