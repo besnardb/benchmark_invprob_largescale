@@ -350,7 +350,7 @@ def compute_psnr(reconstruction, reference, max_pixel=1.0):
         return float("inf")
     return 10.0 * math.log10((max_pixel**2) / mse)
 
-def compute_asinh_psnr(reconstruction, reference, max_pixel=1.0):
+def compute_asinh_psnr(reconstruction, reference, max_pixel=1.0, min_pixel=0.0):
     """Compute asinh-PSNR in dB."""
     vals = reference.flatten()
     if vals.numel() > 1e6:
@@ -360,7 +360,7 @@ def compute_asinh_psnr(reconstruction, reference, max_pixel=1.0):
     beta = (p99 * 1).item()  # Scale factor for asinh transformation
     asinh_gt = torch.arcsinh(reference / beta)
     asinh_recon = torch.arcsinh(reconstruction / beta)
-    asinh_range = math.asinh(max_pixel / beta) - math.asinh(max_pixel / beta)
+    asinh_range = math.asinh(max_pixel / beta) - math.asinh(min_pixel / beta)
     mse_asinh = ((asinh_recon - asinh_gt) ** 2).mean().item()
     asinh_psnr = (
         10.0 * math.log10(asinh_range**2 / mse_asinh) if mse_asinh > 0 else float("inf")

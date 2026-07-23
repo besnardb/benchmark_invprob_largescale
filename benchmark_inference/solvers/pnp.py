@@ -325,6 +325,7 @@ class Solver(BaseSolver):
 
                         # Map back to physical domain with the same fixed constants
                         self.reconstruction = self.reconstruction * scale + sig_min
+                        self.reconstruction = torch.clamp(self.reconstruction, sig_min, sig_max)
                     else:
                         # "clip" strategy: work directly in physical domain and
                         # clamp to clip_range after denoising.

@@ -18,6 +18,7 @@ from karabo.calibration.noise_rms import ska_low_noise_rms, meerkat_noise_rms
 from toolsbench.utils.radio_utils import (
     MEERKAT_LOCATION,
     SKALOW_LOCATION,
+    LOFAR_LOCATION,
     draw_random_pointing,
     get_cellsize_from_fits_wcs,
     get_meerkat_visibilities_path,
@@ -40,8 +41,8 @@ def set_phase_center(
     n_simulations = 1
     # Observation data and time
     # zenith at MeerKAT around 18:36 UTC with RA=155.66367, Dec=-30.7130
-    obs_date_time = datetime(2020, 4, 26, 18, 36, 0, 0, timezone.utc)
-    telescope_location = MEERKAT_LOCATION if telescope_name == "meerkat" else SKALOW_LOCATION
+    obs_date_time = datetime(2020, 4, 26, 15, 50, 0, 0, timezone.utc)
+    telescope_location = LOFAR_LOCATION if telescope_name.lower() == "lofar-full" else MEERKAT_LOCATION
     
     if random_position:
         try:
@@ -147,6 +148,7 @@ def generate_meerkat_visibilities(
     image: np.ndarray,
     cache_dir: Path,
     use_gpus: bool = False,
+    telescope_name: str = "LOFAR-FULL",
     number_of_time_steps: int = 256,
     start_frequency_hz: float = 100e6,
     end_frequency_hz: float = 120e6,
@@ -188,7 +190,7 @@ def generate_meerkat_visibilities(
 
     # Setup MeerKAT
     telescope = Telescope.constructor(
-        name="MeerKAT",
+        name=telescope_name,
         backend=SimulatorBackend.OSKAR,
     )
 
@@ -277,7 +279,6 @@ def generate_meerkat_visibilities(
             pol_mode=pol_mode,  # Scalar = 1pol / Full = 4 pol
             station_type="Aperture array",
             noise_enable=False,
-            cuda_device_ids="6",
             use_gpus=use_gpus,
         )
 
@@ -294,6 +295,7 @@ def generate_meerkat_visibilities(
         "imaging_npixel": int(imaging_npixel),
         "phase_center_ra_deg": float(phase_center_ra),
         "phase_center_dec_deg": float(phase_center_dec),
+        "telescope_name": telescope_name,
         "start_frequency_hz": int(start_frequency_hz),
         "frequency_increment_hz": int(frequency_increment_hz),
         "number_of_channels": int(number_of_channels),

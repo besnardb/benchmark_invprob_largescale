@@ -1,14 +1,15 @@
 job:
-  fits_name: "RA_18.7117_DEC_0.3194_size_1024.fits"
+  fits_name: "composite_0.fits"
   pos_ra: 155.66367
   pos_dec: -30.7130
   random_position: True
   image_size: [1024]
   data_path: "./data/radio_interferometry"
   use_gpus: True
-  number_of_time_steps: 1024
-  start_frequency_hz: 1.300e9
-  end_frequency_hz: 1.340e9
+  telescope_name: "LOFAR-FULL"
+  number_of_time_steps: 1800
+  start_frequency_hz: 100e6
+  end_frequency_hz: 150e6
   number_of_channels: 32
   add_noise: True
   pol_mode: "Full"

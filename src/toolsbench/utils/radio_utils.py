@@ -26,6 +26,12 @@ SKALOW_LOCATION = EarthLocation(
     height=300.0 * u.m
 )
 
+LOFAR_LOCATION = EarthLocation(
+    lat=52.915 * u.deg,
+    lon=6.869 * u.deg,
+    height=50.0 * u.m
+)
+
 def load_and_resize_image(image_path, image_size, normalize=False):
     """Load and resize a FITS image.
 

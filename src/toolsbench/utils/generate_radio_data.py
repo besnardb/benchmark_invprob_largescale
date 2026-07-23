@@ -22,6 +22,7 @@ def generate_data_for_size(cfg, image_size):
     pos_dec = float(cfg.pos_dec)
     random_position = bool(cfg.random_position)
     use_gpus = bool(cfg.use_gpus)
+    telescope_name = str(cfg.telescope_name)
     number_of_time_steps = int(cfg.number_of_time_steps)
     start_frequency_hz = float(cfg.start_frequency_hz)
     end_frequency_hz = float(cfg.end_frequency_hz)
@@ -75,6 +76,7 @@ def generate_data_for_size(cfg, image_size):
         resized_img,
         ms_cache_dir,
         use_gpus=use_gpus,
+        telescope_name=telescope_name,
         number_of_time_steps=number_of_time_steps,
         start_frequency_hz=start_frequency_hz,
         end_frequency_hz=end_frequency_hz,

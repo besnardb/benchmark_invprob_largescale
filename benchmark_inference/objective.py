@@ -186,10 +186,32 @@ class Objective(BaseObjective):
                 f"eval_{self.evaluation_count:04d}_reconstruction.fits"
             )
             fits_path.parent.mkdir(parents=True, exist_ok=True)
-            fits.PrimaryHDU(reconstruction_np).writeto(fits_path, overwrite=True)
+            hdr = fits.Header()
+            pixel_size_arcsec = 1.5
+            cdelt = pixel_size_arcsec / 3600.0
+            hdr["UNIT1"] = 'deg' 
+            hdr["UNIT2"] = 'deg'
+            hdr["CTYPE1"] = 'RA---SIN'
+            hdr["CTYPE2"] = 'DEC--SIN'
+            hdr["CDELT1"] = -cdelt
+            hdr["CDELT2"] = cdelt
+            hdr["CRVAL1"] = 0
+            hdr["CRVAL2"] = 0
+            hdr["LONPOLE"] = 180.0
+            hdr["LATPOLE"] = 0.0
+            hdr["BUNIT"] = "JY/PIXEL"
+            hdr["HISTORY"] = "Reconstruction"
+            fits.PrimaryHDU(reconstruction_np, header=hdr).writeto(fits_path, overwrite=True)
 
         # Return value (primary metric for stopping criterion) and additional metrics
-        result = dict(value=-asinh_psnr, psnr=psnr, ssim=ssim, mse=mse, asinh_psnr=asinh_psnr)
+
+        result = dict(
+            value=-asinh_psnr,
+            psnr=psnr,
+            ssim=ssim,
+            mse=mse,
+            asinh_psnr=asinh_psnr,
+        )
 
         # Add all non-None metrics from kwargs to result
         for key, value in kwargs.items():
