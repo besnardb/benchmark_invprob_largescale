@@ -23,6 +23,7 @@ from toolsbench.utils.radio_utils import (
     get_cellsize_from_fits_wcs,
     get_meerkat_visibilities_path,
     is_source_visible,
+    lofar_noise_rms
 )
 
 
@@ -234,7 +235,13 @@ def generate_meerkat_visibilities(
 
     rms_start = None
     rms_end = None
-    telescope_noise_rms = meerkat_noise_rms if telescope.name.lower() == "meerkat" else ska_low_noise_rms
+    if telescope.name.lower() == "meerkat":
+        telescope_noise_rms = meerkat_noise_rms 
+    elif telescope.name.lower() =="lofar-full":
+        telescope_noise_rms = lofar_noise_rms 
+    else:
+        telescope_noise_rms = ska_low_noise_rms
+        
     if add_noise:
 
         rms_start = telescope_noise_rms(

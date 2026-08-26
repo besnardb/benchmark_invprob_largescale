@@ -329,3 +329,98 @@ def get_cellsize_from_fits_wcs(fits_file: Path) -> float:
         pixel_scale_deg = abs(float(cdelt1 if cdelt1 is not None else cdelt2))
 
     return math.radians(pixel_scale_deg)
+
+def meerkat_noise_rms(freq_hz: float,
+                      bandwidth_hz: float,
+                      integration_time_s: float,
+                      eta_s: float = 1.0) -> float:
+    
+    k_B = 1.380649e-23  # Boltzmann constant
+    D = 13.5            # Dish diameter [m]
+    sigma_surf = 600e-6  # Surface RMS [m]
+    
+    if freq_hz < 0.58e9 or freq_hz > 3.05e9:
+        raise ValueError("Frequency out of MeerKAT operational range")
+    
+    freq_GHz = freq_hz / 1e9
+    lam = 3e8 / freq_hz
+    
+    if freq_hz >= 0.58e9 and freq_hz < 1.02e9: # Band UHF
+        T_rcv = 11 - 4.5 * (freq_GHz - 0.58)
+    elif freq_hz >= 1.02e9 and freq_hz < 1.67e9: # Band L
+        T_rcv = 7.5 + 6.8 * ((np.abs(freq_GHz - 1.65))**1.5)
+    elif freq_hz >= 1.67e9 and freq_hz <= 3.05e9: # Band S
+        T_rcv = 7.5
+
+    T_sys = T_rcv + 2.73 + 4  # T_sky + T_spl
+
+    # Efficiencies
+    hF = 0.80 - 0.04 * np.abs(np.log10(freq_GHz))
+    hD = 1 - 20 * (lam / D)**1.5
+    eps_phase = np.exp(-(4 * np.pi * sigma_surf / lam)**2)
+    eta_ap = hF * hD * eps_phase
+
+    A_eff = eta_ap * np.pi * (D/2)**2
+
+    # SEFD en Jy
+    sefd_jy = (2 * k_B * T_sys) / A_eff * 1e26
+
+    sigma_noise = sefd_jy / (eta_s * np.sqrt(2 * bandwidth_hz * integration_time_s))
+
+    return sigma_noise
+
+def lofar_sefd_jy(freq_hz: float, mode: str = "HBA") -> float:
+
+    freq_mhz = freq_hz / 1e6
+
+    if mode.upper() == "LBA":
+
+        if not 10 <= freq_mhz <= 90:
+            raise ValueError("LBA frequency must be between 10 and 90 MHz.")
+
+        # Simple sky-dominated approximation.
+        sefd = 40e3 * (freq_mhz / 60.0) ** (-2.5)
+
+        sefd = max(sefd, 40e3)
+
+        if freq_mhz > 70:
+            sefd *= 1.0 + 1.0 * (freq_mhz - 70.0) / 20.0
+
+        return sefd
+
+    elif mode.upper() == "HBA":
+        if not 110 <= freq_mhz <= 240:
+            raise ValueError("HBA frequency must be between 110 and 240 MHz.")
+
+        # Approximate interpolation of LOFAR HBA Core station SEFD.
+        freq_table = np.array([
+            120, 150, 180, 200, 210, 240
+        ])
+
+        sefd_table = np.array([
+            2.5e3,
+            2.8e3,
+            3.3e3,
+            3.8e3,
+            4.2e3,
+            5.0e3,
+        ])
+
+        return float(np.interp(freq_mhz, freq_table, sefd_table))
+
+    else:
+        raise ValueError("mode must be 'LBA' or 'HBA'.")
+
+
+def lofar_noise_rms(
+    freq_hz: float,
+    bandwidth_hz: float,
+    integration_time_s: float,
+    mode: str = "HBA",
+) -> float:
+
+    sefd_jy = lofar_sefd_jy(freq_hz, mode)
+
+    return sefd_jy / np.sqrt(
+        2.0 * bandwidth_hz * integration_time_s
+    )
